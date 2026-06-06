@@ -51,6 +51,14 @@ class InfiniteSamplerWrapper(data.sampler.Sampler):
         return 2 ** 31
 
 
+def _rescale(img):
+    return img * 2.0 - 1.0
+
+
+def _noise_adder(img):
+    return torch.empty_like(img, dtype=img.dtype).uniform_(0.0, 1 / 128.0) + img
+
+
 def prepare_results_dir(args):
     """Makedir, init tensorboard if required, save args."""
     if args.test:
@@ -242,12 +250,6 @@ def main():
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
     torch.backends.cudnn.benchmark = True
 
-    def _rescale(img):
-        return img * 2.0 - 1.0
-
-    def _noise_adder(img):
-        return torch.empty_like(img, dtype=img.dtype).uniform_(0.0, 1/128.0) + img
-
     # dataset
     train_dataset = datasets.ImageFolder(
         os.path.join(args.data_root, 'train'),
@@ -399,4 +401,5 @@ def main():
 
 
 if __name__ == '__main__':
+    torch.multiprocessing.set_start_method('spawn')
     main()
