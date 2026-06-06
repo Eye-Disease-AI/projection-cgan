@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 
+from dataset.loader import NuclearCataractDataset
 import numpy as np
 import torch
 import torch.utils.data as data
@@ -14,6 +15,7 @@ import torch.optim as optim
 import torchvision
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
+from torchvision.transforms import v2
 import tqdm
 
 import evaluation
@@ -239,6 +241,27 @@ def sample_from_gen(args, device, num_classes, gen):
     return fake, pseudo_y, z
 
 
+class SubsetTransformer(torch.utils.data.Dataset):
+    """Wrapper for subset that allows applying different transforms on each dataset subset (train, val, test)"""
+
+    def __init__(self, subset, transform=None, cache=True):
+        self.subset = subset
+        self.transform = transform
+        self.do_cache = cache
+
+    def __len__(self):
+        return len(self.subset)
+
+    def __getitem__(self, idx):
+        data = self.subset[idx]
+        sample = data[0]
+        if self.transform is not None:
+            sample = self.transform(sample)
+        result = [sample]
+        result += list(data[1:])
+        return tuple(result)
+
+
 def main():
     args = get_args()
     # CUDA setting
@@ -250,25 +273,33 @@ def main():
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
     torch.backends.cudnn.benchmark = True
 
-    # dataset
-    train_dataset = datasets.ImageFolder(
-        os.path.join(args.data_root, 'train'),
+    ds = NuclearCataractDataset(
+        NuclearCataractDataset.TrainValMode(0.8, 0.2), cache_size=64
+    )
+
+    train_dataset = SubsetTransformer(
+        ds.train_set(),
         transforms.Compose([
-            transforms.ToTensor(), _rescale, _noise_adder,
+            v2.ToDtype(torch.float32, scale=True), v2.CenterCrop(64),
+            _rescale, _noise_adder,
         ])
     )
+
     train_loader = iter(data.DataLoader(
         train_dataset, args.batch_size,
         sampler=InfiniteSamplerWrapper(train_dataset),
         num_workers=args.num_workers, pin_memory=True)
     )
+
     if args.calc_FID:
-        eval_dataset = datasets.ImageFolder(
-            os.path.join(args.data_root, 'val'),
+        eval_dataset = SubsetTransformer(
+            ds.train_set(),
             transforms.Compose([
-                transforms.ToTensor(), _rescale,
+                v2.ToDtype(torch.float32, scale=True), v2.CenterCrop(64),
+                _rescale,
             ])
         )
+
         eval_loader = iter(data.DataLoader(
             eval_dataset, args.batch_size,
             sampler=InfiniteSamplerWrapper(eval_dataset),
@@ -276,7 +307,7 @@ def main():
         )
     else:
         eval_loader = None
-    num_classes = len(train_dataset.classes)
+    num_classes = ds.n_classes
     print(' prepared datasets...')
     print(' Number of training images: {}'.format(len(train_dataset)))
     # Prepare directories.
@@ -366,7 +397,7 @@ def main():
                 writer.add_image(
                     'real', torchvision.utils.make_grid(
                         real, nrow=4, normalize=True, scale_each=True))
-            # Save previews
+        if n_iter % 1000 == 0:
             utils.save_images(
                 n_iter, n_iter // args.checkpoint_interval, args.results_root,
                 args.train_image_root, fake, real

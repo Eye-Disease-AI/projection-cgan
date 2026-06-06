@@ -113,11 +113,11 @@ def save_images(n_iter, count, root, train_image_root, fake, real):
         'real_{}_iter_{:07d}.png'.format(count, n_iter)
     )
     torchvision.utils.save_image(
-        fake, fake_path, nrow=4, normalize=True, scale_each=True
+        fake, fake_path, nrow=4, normalize=True, value_range=(-1, 1)
     )
     shutil.copy(fake_path, os.path.join(root, 'fake_latest.png'))
     torchvision.utils.save_image(
-        real, real_path, nrow=4, normalize=True, scale_each=True
+        real, real_path, nrow=4, normalize=True, value_range=(-1, 1)
     )
     shutil.copy(real_path, os.path.join(root, 'real_latest.png'))
 
