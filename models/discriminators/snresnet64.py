@@ -10,11 +10,13 @@ from models.discriminators.resblocks import OptimizedBlock
 
 class SNResNetProjectionDiscriminator(nn.Module):
 
-    def __init__(self, num_features=64, num_classes=0, activation=F.relu):
+    def __init__(self, num_features=64, num_classes=0, activation=F.relu,
+                 image_size=64):
         super(SNResNetProjectionDiscriminator, self).__init__()
         self.num_features = num_features
         self.num_classes = num_classes
         self.activation = activation
+        self.image_size = image_size
 
         self.block1 = OptimizedBlock(3, num_features)
         self.block2 = Block(num_features, num_features * 2,
@@ -25,6 +27,9 @@ class SNResNetProjectionDiscriminator(nn.Module):
                             activation=activation, downsample=True)
         self.block5 = Block(num_features * 8, num_features * 16,
                             activation=activation, downsample=True)
+        if image_size == 224:
+            self.block6 = Block(num_features * 16, num_features * 16,
+                                activation=activation, downsample=True)
         self.l6 = utils.spectral_norm(nn.Linear(num_features * 16, 1))
         if num_classes > 0:
             self.l_y = utils.spectral_norm(
@@ -45,6 +50,8 @@ class SNResNetProjectionDiscriminator(nn.Module):
         h = self.block3(h)
         h = self.block4(h)
         h = self.block5(h)
+        if self.image_size == 224:
+            h = self.block6(h)
         h = self.activation(h)
         # Global pooling
         h = torch.sum(h, dim=(2, 3))
@@ -57,12 +64,13 @@ class SNResNetProjectionDiscriminator(nn.Module):
 class SNResNetConcatDiscriminator(nn.Module):
 
     def __init__(self, num_features, num_classes, activation=F.relu,
-                 dim_emb=128):
+                 dim_emb=128, image_size=64):
         super(SNResNetConcatDiscriminator, self).__init__()
         self.num_features = num_features
         self.num_classes = num_classes
         self.dim_emb = dim_emb
         self.activation = activation
+        self.image_size = image_size
 
         self.block1 = OptimizedBlock(3, num_features)
         self.block2 = Block(num_features, num_features * 2,
@@ -75,6 +83,9 @@ class SNResNetConcatDiscriminator(nn.Module):
                             activation=activation, downsample=True)
         self.block5 = Block(num_features * 8, num_features * 16,
                             activation=activation, downsample=True)
+        if image_size == 224:
+            self.block6 = Block(num_features * 16, num_features * 16,
+                                activation=activation, downsample=True)
         self.l6 = utils.spectral_norm(nn.Linear(num_features * 16, 1))
 
         self._initialize()
@@ -95,5 +106,7 @@ class SNResNetConcatDiscriminator(nn.Module):
             h = torch.cat((h, emb), dim=1)
         h = self.block4(h)
         h = self.block5(h)
+        if self.image_size == 224:
+            h = self.block6(h)
         h = torch.sum(self.activation(h), dim=(2, 3))
         return self.l6(h)

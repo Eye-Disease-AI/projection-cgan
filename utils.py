@@ -177,9 +177,10 @@ def resume_from_args(args_path, gen_ckpt_path, dis_ckpt_path):
         args = json.load(f)
     conditional = args['cGAN']
     num_classes = args['num_classes'] if conditional else 0
+    image_size = args.get('image_size', 64)
     # Initialize generator
     gen = resnet64.ResNetGenerator(
-        args['gen_num_features'], args['gen_dim_z'], args['gen_bottom_width'],
+        args['gen_num_features'], args['gen_dim_z'], image_size,
         num_classes=num_classes, distribution=args['gen_distribution']
     )
     opt_gen = torch.optim.Adam(
@@ -188,11 +189,12 @@ def resume_from_args(args_path, gen_ckpt_path, dis_ckpt_path):
     # Initialize discriminator
     if args['dis_arch_concat']:
         dis = snresnet64.SNResNetConcatDiscriminator(
-            args['dis_num_features'], num_classes, dim_emb=args['dis_emb']
+            args['dis_num_features'], num_classes, dim_emb=args['dis_emb'],
+            image_size=image_size
         )
     else:
         dis = snresnet64.SNResNetProjectionDiscriminator(
-            args['dis_num_features'], num_classes
+            args['dis_num_features'], num_classes, image_size=image_size
         )
     opt_dis = torch.optim.Adam(
         dis.parameters(), args['lr'], (args['beta1'], args['beta2'])

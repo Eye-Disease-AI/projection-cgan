@@ -129,8 +129,9 @@ def get_args():
                         help='Number of features of generator (a.k.a. nplanes or ngf). default: 64')
     parser.add_argument('--gen_dim_z', '-gdz', type=int, default=128,
                         help='Dimension of generator input noise. default: 128')
-    parser.add_argument('--gen_bottom_width', '-gbw', type=int, default=4,
-                        help='Initial size of hidden variable of generator. default: 4')
+    parser.add_argument('--image_size', '-is', type=int, default=64,
+                        choices=[64, 224],
+                        help='Output image resolution: 64 or 224. default: 64')
     parser.add_argument('--gen_distribution', '-gd', type=str, default='normal',
                         help='Input noise distribution: normal (default) or uniform.')
     # Discriminator (Critic) configuration
@@ -273,14 +274,16 @@ def main():
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
     torch.backends.cudnn.benchmark = True
 
+    image_size = args.image_size
+
     ds = NuclearCataractDataset(
-        NuclearCataractDataset.TrainValMode(0.8, 0.2), cache_size=64
+        NuclearCataractDataset.TrainValMode(0.8, 0.2), cache_size=image_size
     )
 
     train_dataset = SubsetTransformer(
         ds.train_set(),
         transforms.Compose([
-            v2.ToDtype(torch.float32, scale=True), v2.CenterCrop(64),
+            v2.ToDtype(torch.float32, scale=True), v2.CenterCrop(image_size),
             _rescale, _noise_adder,
         ])
     )
@@ -295,7 +298,7 @@ def main():
         eval_dataset = SubsetTransformer(
             ds.train_set(),
             transforms.Compose([
-                v2.ToDtype(torch.float32, scale=True), v2.CenterCrop(64),
+                v2.ToDtype(torch.float32, scale=True), v2.CenterCrop(image_size),
                 _rescale,
             ])
         )
@@ -316,15 +319,17 @@ def main():
     # initialize models.
     _n_cls = num_classes if args.cGAN else 0
     gen = ResNetGenerator(
-        args.gen_num_features, args.gen_dim_z, args.gen_bottom_width,
+        args.gen_num_features, args.gen_dim_z, args.image_size,
         activation=F.relu, num_classes=_n_cls, distribution=args.gen_distribution
     ).to(device)
     if args.dis_arch_concat:
         dis = SNResNetConcatDiscriminator(
-            args.dis_num_features, _n_cls, F.relu, args.dis_emb).to(device)
+            args.dis_num_features, _n_cls, F.relu, args.dis_emb,
+            image_size=args.image_size).to(device)
     else:
         dis = SNResNetProjectionDiscriminator(
-            args.dis_num_features, _n_cls, F.relu).to(device)
+            args.dis_num_features, _n_cls, F.relu,
+            image_size=args.image_size).to(device)
     inception_model = inception.InceptionV3().to(device) if args.calc_FID else None
 
     opt_gen = optim.Adam(gen.parameters(), args.lr, (args.beta1, args.beta2))
